@@ -15,6 +15,8 @@ import { Observable, Observer, Subject } from 'rxjs';
 // Workaround for rollup library behaviour, as pointed out on issue #1267 (https://github.com/rollup/rollup/issues/1267).
 import * as Keycloak_ from 'keycloak-js';
 export const Keycloak = Keycloak_;
+import * as KeycloakAuthorization_ from 'keycloak-js/dist/keycloak-authz';
+export const KeycloakAuthorization = KeycloakAuthorization_;
 
 import {
   KeycloakOptions,
@@ -65,13 +67,85 @@ export class KeycloakService {
   /**
    * The excluded urls patterns that must skip the KeycloakBearerInterceptor.
    */
-  private _excludedUrls: ExcludedUrlRegex[];
+  private _bearerExcludedUrls: ExcludedUrlRegex[];
   /**
    * Observer for the keycloak events
    */
-  private _keycloakEvents$: Subject<KeycloakEvent> = new Subject<
-    KeycloakEvent
-  >();
+  private _keycloakEvents$: Subject<KeycloakEvent>;
+  /**
+   * The excluded urls patterns that must skip the KeycloakRptInterceptor.
+   */
+  private _rptExcludedUrls: string[];
+  /**
+   * Determines whether RPT interceptor should be activated
+   * (keycloak-authz-js is initiated and RPT interceptor is enabled if true).
+   */
+  private _isEnableRPTInterceptor: boolean;
+  /**
+   * Keycloak-authz-js instance.
+   */
+  private _authzInstance: KeycloakAuthorization.KeycloakAuthorizationInstance;
+  /**
+   * String "uma" or "entitlement" specifies, which function of the two functions
+   * KeycloakAuthorizationInstance.authorize() or KeycloakAuthorizationInstance.entitlement()
+   * will be used to obtain RPT. When not set, UMA is used.
+   */
+  private _resourceServerAuthorizationType: string;
+  /**
+   * Resource server ID, only needed when resourceServerAuthorizationType is set to "entitlement";
+   */
+  private _resourceServerID: string;
+  /**
+   * Serves as a template for an Authroization Request consumed by functions
+   * KeycloakAuthorizationInstance.authorize() and KeycloakAuthorizationInstance.entitlement().
+   */
+  private _authorizationRequestTemplate: KeycloakAuthorization.AuthorizationRequest;
+  /**
+   * This emitter is used by RPT Interceptor to notify that when new RPT was obtained.
+   */
+  private _RPTupdateEmitter: Observer<string>;
+  /**
+   * Observable that emits new RPT when it was updated by RPT interceptor.
+   */
+  private _RPTupdated$: Observable<string> = Observable.create(
+    async (observer: Observer<string>) => {
+      this._RPTupdateEmitter = observer;
+    }
+  );
+
+  constructor() {
+    this._keycloakEvents$ = new Subject<KeycloakEvent>();
+  }
+
+  /**
+   * Sanitizes the bearer prefix, preparing it to be appended to
+   * the token.
+   *
+   * @param bearerPrefix
+   * Prefix to be appended to the authorization header as
+   * Authorization: <bearer-prefix> <token>.
+   * @returns
+   * The bearer prefix sanitized, meaning that it will follow the bearerPrefix
+   * param as described in the library initilization or the default value bearer,
+   * with a space append in the end for the token concatenation.
+   */
+  private sanitizeBearerPrefix(bearerPrefix: string | undefined): string {
+    const prefix: string = (bearerPrefix || 'bearer').trim();
+    return prefix.concat(' ');
+  }
+
+  /**
+   * Sets default value to true if it is undefined or null.
+   *
+   * @param value - boolean value to be checked
+   */
+  private ifUndefinedIsTrue(value: boolean): boolean {
+    let returnValue: boolean = value;
+    if (returnValue === undefined || returnValue === null) {
+      returnValue = true;
+    }
+    return returnValue;
+  }
 
   /**
    * Binds the keycloak-js events to the keycloakEvents Subject
@@ -81,6 +155,13 @@ export class KeycloakService {
    * argument if the source function provides any.
    */
   private bindsKeycloakEvents(): void {
+    if (!this._instance) {
+      console.warn(
+        'Keycloak Angular events could not be registered as the keycloak instance is undefined.'
+      );
+      return;
+    }
+
     this._instance.onAuthError = errorData => {
       this._keycloakEvents$.next({
         args: errorData,
@@ -157,6 +238,8 @@ export class KeycloakService {
     enableBearerInterceptor = true,
     loadUserProfileAtStartUp = true,
     bearerExcludedUrls = [],
+    rptExcludedUrls = [],
+    enableRPTInterceptor = false,
     authorizationHeaderName = 'Authorization',
     bearerPrefix = 'bearer',
     initOptions
@@ -165,7 +248,9 @@ export class KeycloakService {
     this._loadUserProfileAtStartUp = loadUserProfileAtStartUp;
     this._authorizationHeaderName = authorizationHeaderName;
     this._bearerPrefix = bearerPrefix.trim().concat(' ');
-    this._excludedUrls = this.loadExcludedUrls(bearerExcludedUrls);
+    this._bearerExcludedUrls = this.loadExcludedUrls(bearerExcludedUrls);
+    this._rptExcludedUrls = rptExcludedUrls,
+    this._isEnableRPTInterceptor = enableRPTInterceptor,
     this._silentRefresh = initOptions ? initOptions.flow === 'implicit' : false;
   }
 
@@ -229,6 +314,22 @@ export class KeycloakService {
       this._instance
         .init(initOptions)
         .success(async authenticated => {
+          // the KeycloakAuthorization is initialized only when
+          // enableRPTInterceptor from KeycloakOptions is set to true
+          if (this._isEnableRPTInterceptor) {
+            this._authzInstance = KeycloakAuthorization(this._instance);
+            this._authorizationRequestTemplate = options.authorizationRequestTemplate || {};
+            this._resourceServerAuthorizationType =
+              options.resourceServerAuthorizationType || 'uma';
+            this._resourceServerAuthorizationType = this._resourceServerAuthorizationType.toLowerCase();
+            if (
+              this._resourceServerAuthorizationType !== 'uma' &&
+              this._resourceServerAuthorizationType !== 'entitlement'
+            ) {
+              options.resourceServerAuthorizationType = 'uma';
+            }
+            this._resourceServerID = options.resourceServerID || '';
+          }
           if (authenticated && this._loadUserProfileAtStartUp) {
             await this.loadUserProfile();
           }
@@ -237,7 +338,7 @@ export class KeycloakService {
         .error(kcError => {
           let msg = 'An error happened during Keycloak initialization.';
           if (kcError) {
-            let { error, error_description } = kcError;
+            const { error, error_description } = kcError;
             msg = msg.concat(
               `\nAdapter error details:\nError: ${error}\nDescription: ${error_description}`
             );
@@ -373,7 +474,7 @@ export class KeycloakService {
       }
     }
     if (allRoles && this._instance.realmAccess) {
-      let realmRoles = this._instance.realmAccess['roles'] || [];
+      const realmRoles = this._instance.realmAccess['roles'] || [];
       roles.push(...realmRoles);
     }
     return roles;
@@ -469,7 +570,7 @@ export class KeycloakService {
         return;
       }
 
-      if (!this._instance.authenticated) {
+      if (!(await this.isLoggedIn())) {
         reject('The user profile was not loaded as the user is not logged in.');
         return;
       }
@@ -513,7 +614,7 @@ export class KeycloakService {
       throw new Error('User not logged in or user profile was not loaded.');
     }
 
-    return this._userProfile.username!;
+    return this._userProfile.username;
   }
 
   /**
@@ -535,10 +636,12 @@ export class KeycloakService {
    * @returns
    * An observable with with the HTTP Authorization header and the current token.
    */
-  addTokenToHeader(
-    headers: HttpHeaders = new HttpHeaders()
-  ): Observable<HttpHeaders> {
+  addTokenToHeader(headersArg?: HttpHeaders): Observable<HttpHeaders> {
     return Observable.create(async (observer: Observer<any>) => {
+      let headers = headersArg;
+      if (!headers) {
+        headers = new HttpHeaders();
+      }
       try {
         const token: string = await this.getToken();
         headers = headers.set(
@@ -571,8 +674,112 @@ export class KeycloakService {
    * @returns
    * The excluded urls that must not be intercepted by the KeycloakBearerInterceptor.
    */
-  get excludedUrls(): ExcludedUrlRegex[] {
-    return this._excludedUrls;
+  get bearerExcludedUrls(): ExcludedUrlRegex[] {
+    return this._bearerExcludedUrls;
+  }
+
+  /**
+   * Returns the excluded URLs that should not be considered by
+   * the RPT http interceptor which automatically adds the authorization header in the Http Request.
+   *
+   * @returns
+   * The excluded urls that must not be intercepted by the KeycloakRptInterceptor.
+   */
+  get rptExcludedUrls(): string[] {
+    return this._rptExcludedUrls;
+  }
+
+  /**
+   * Returns true if authorization is enabled, false otherwise.
+   *
+   * @returns
+   * true if authorization is enabled, false otherwise.
+   */
+  get isEnableRPTInterceptor(): boolean {
+    return this._isEnableRPTInterceptor;
+  }
+
+  /**
+   * Returns the original Keycloak Authorization instance from the official keycloak-js library.
+   *
+   * @returns
+   */
+  get keycloakAuthorizationInstance(): KeycloakAuthorization.KeycloakAuthorizationInstance {
+    return this._authzInstance;
+  }
+
+  /**
+   * Returns the RPT (Requesting Party Token) if it exists.
+   *
+   * @return
+   */
+  get RPT(): any {
+    return this.keycloakAuthorizationInstance.rpt;
+  }
+
+  /**
+   * Adds a requesting party token (RPT) token to header. The key: value format is:
+   * Authorization: Bearer <token>.
+   * If the headers param is undefined it will create the Angular headers object.
+   *
+   * @param headersArg updated header with Authorization and Keycloak token.
+   */
+  addRPTToHeader(headersArg?: HttpHeaders): HttpHeaders {
+    let headers = headersArg;
+    if (!headers) {
+      headers = new HttpHeaders();
+    }
+    try {
+      const token: string = this.keycloakAuthorizationInstance.rpt || '';
+      headers = headers.set('Authorization', 'bearer ' + token);
+
+      return headers;
+    } catch (error) {
+      console.log(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @return
+   * resourceServerAuthorizationType that was set in KeycloakOptions, "uma" or "entitlement"
+   */
+  get resourceServerAuthorizationType(): string {
+    return this._resourceServerAuthorizationType;
+  }
+
+  /**
+   * @return
+   * authorizationRequestTemplate that was set in KeycloakOptions
+   */
+  get authorizationRequestTemplate(): KeycloakAuthorization.AuthorizationRequest {
+    return this._authorizationRequestTemplate;
+  }
+
+  /**
+   * @return
+   * resourceServerID that was set in KeycloakOptions
+   */
+  get resourceServerID(): string {
+    return this._resourceServerID;
+  }
+
+  /**
+   * @return
+   *  emitter which shoudl used to emit new RPT when it is obtained.
+   */
+  get RPTupdateEmitter(): Observer<string> {
+    return this._RPTupdateEmitter;
+  }
+
+  /**
+   * Observable that emits new RPT when it was updated by RPT interceptor.
+   *
+   * @returns
+   * Observable that emits new RPT when it was updated by RPT interceptor
+   */
+  get RPTupdated(): Observable<string> {
+    return this._RPTupdated$;
   }
 
   /**

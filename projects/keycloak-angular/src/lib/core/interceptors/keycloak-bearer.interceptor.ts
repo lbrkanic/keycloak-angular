@@ -42,11 +42,11 @@ export class KeycloakBearerInterceptor implements HttpInterceptor {
     { method, url }: HttpRequest<any>,
     { urlPattern, httpMethods }: ExcludedUrlRegex
   ): boolean {
-    let httpTest =
+    const httpTest =
       httpMethods.length === 0 ||
       httpMethods.join().indexOf(method.toUpperCase()) > -1;
 
-    let urlTest = urlPattern.test(url);
+    const urlTest = urlPattern.test(url);
 
     return httpTest && urlTest;
   }
@@ -62,13 +62,13 @@ export class KeycloakBearerInterceptor implements HttpInterceptor {
     req: HttpRequest<any>,
     next: HttpHandler
   ): Observable<HttpEvent<any>> {
-    const { enableBearerInterceptor, excludedUrls } = this.keycloak;
+    const { enableBearerInterceptor, bearerExcludedUrls } = this.keycloak;
     if (!enableBearerInterceptor) {
       return next.handle(req);
     }
 
     const shallPass: boolean =
-      excludedUrls.findIndex(item => this.isUrlExcluded(req, item)) > -1;
+      bearerExcludedUrls.findIndex(item => this.isUrlExcluded(req, item)) > -1;
     if (shallPass) {
       return next.handle(req);
     }
