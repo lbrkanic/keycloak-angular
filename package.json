@@ -6,6 +6,7 @@
     "node_modules"
   ],
   "main": "./dist/keycloak-angular/bundles/keycloak-angular.umd.js",
+  "module": "./dist/keycloak-angular/fesm5/keycloak-angular.js",
   "types": "./dist/keycloak-angular/keycloak-angular.d.ts",
   "description": "Easy Keycloak setup for Angular applications",
   "scripts": {
