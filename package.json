@@ -43,6 +43,9 @@
     "keycloak",
     "keycloak-js"
   ],
+  "dependencies": {
+    "keycloak-js": "^4.8.3"
+  },
   "devDependencies": {
     "@angular-devkit/build-angular": "~0.13.0",
     "@angular-devkit/build-ng-packagr": "~0.13.0",
