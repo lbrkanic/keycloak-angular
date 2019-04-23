@@ -1,6 +1,12 @@
 {
   "name": "keycloak-angular",
   "version": "4.0.0",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/keycloak-angular/bundles/keycloak-angular.umd.js",
+  "module": "./dist/keycloak-angular/fesm5/keycloak-angular.js",
+  "types": "./dist/keycloak-angular/keycloak-angular.d.ts",
   "description": "Easy Keycloak setup for Angular applications",
   "scripts": {
     "contributors:add": "all-contributors add",
@@ -74,5 +80,10 @@
     "tslint": "~5.10.0",
     "typescript": "~2.7.2",
     "zone.js": "^0.8.26"
+  },
+  "peerDependencies": {
+    "@angular/common": "^7.0.0",
+    "@angular/core": "^7.0.0",
+    "rxjs": "^6.3.3"
   }
 }
