@@ -15,6 +15,7 @@
     "start": "ng serve",
     "build": "ng build",
     "build:keycloak-angular": "ng build keycloak-angular",
+    "prepare": "npm run build",
     "test": "ng test",
     "lint": "ng lint",
     "doc:serve": "npx docsify serve ./docs --port 3001"
