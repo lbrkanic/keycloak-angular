@@ -2,7 +2,8 @@
   "name": "keycloak-angular",
   "version": "4.0.0",
   "files": [
-    "dist"
+    "dist",
+    "node_modules"
   ],
   "main": "./dist/keycloak-angular/bundles/keycloak-angular.umd.js",
   "module": "./dist/keycloak-angular/fesm5/keycloak-angular.js",
