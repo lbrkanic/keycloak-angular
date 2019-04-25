@@ -99,17 +99,7 @@ export class KeycloakService {
   /**
    * This emitter is used by RPT Interceptor to notify that when new RPT was obtained.
    */
-  private _RPTupdateEmitter: Observer<string> = {
-    next(value) {
-      console.log('next rpt');
-    },
-    error() {
-      console.log('error rpt');
-    },
-    complete() {
-      console.log('complete RPT');
-    }
-  };
+  private _RPTupdateEmitter: Observer<string>;
   /**
    * Observable that emits new RPT when it was updated by RPT interceptor.
    */
@@ -136,7 +126,7 @@ export class KeycloakService {
    * with a space append in the end for the token concatenation.
    */
   private sanitizeBearerPrefix(bearerPrefix: string | undefined): string {
-    const prefix: string = (bearerPrefix || 'bearer').trim();
+    let prefix: string = (bearerPrefix || 'bearer').trim();
     return prefix.concat(' ');
   }
 
@@ -256,7 +246,7 @@ export class KeycloakService {
       this._instance = Keycloak(options.config);
       this.bindsKeycloakEvents();
       this._instance
-        .init(options.initOptions)
+        .init(options.initOptions!)
         .success(async authenticated => {
           // the KeycloakAuthorization is initialized only when
           // enableRPTInterceptor from KeycloakOptions is set to true
@@ -339,7 +329,7 @@ export class KeycloakService {
       this._instance
         .logout(options)
         .success(() => {
-          this._userProfile = undefined;
+          this._userProfile = undefined!;
           resolve();
         })
         .error(error => {
@@ -411,7 +401,7 @@ export class KeycloakService {
       }
     }
     if (allRoles && this._instance.realmAccess) {
-      const realmRoles = this._instance.realmAccess['roles'] || [];
+      let realmRoles = this._instance.realmAccess['roles'] || [];
       roles.push(...realmRoles);
     }
     return roles;
@@ -550,7 +540,7 @@ export class KeycloakService {
       throw new Error('User not logged in or user profile was not loaded.');
     }
 
-    return this._userProfile.username;
+    return this._userProfile.username!;
   }
 
   /**
