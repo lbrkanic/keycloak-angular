@@ -103,7 +103,11 @@ export class KeycloakService {
   /**
    * This emitter is used by RPT Interceptor to notify that when new RPT was obtained.
    */
-  private _RPTupdateEmitter: Observer<string>;
+  private _RPTupdateEmitter: Observer<string> = {
+    next() {},
+    error() {},
+    complete() {}
+  };
   /**
    * Observable that emits new RPT when it was updated by RPT interceptor.
    */

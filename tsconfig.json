@@ -15,5 +15,6 @@
     "paths": {
       "keycloak-angular": ["dist/keycloak-angular"]
     }
-  }
+  },
+  "flatModuleId": "@lbrkanic/keycloak-angular"
 }

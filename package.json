@@ -1,20 +1,12 @@
 {
-  "name": "keycloak-angular",
-  "version": "6.1.0",
-  "files": [
-    "dist",
-    "node_modules"
-  ],
-  "main": "./dist/keycloak-angular/bundles/keycloak-angular.umd.js",
-  "module": "./dist/keycloak-angular/fesm5/keycloak-angular.js",
-  "types": "./dist/keycloak-angular/keycloak-angular.d.ts",
+  "name": "@lbrkanic/keycloak-angular",
+  "version": "6.2.2",
   "description": "Easy Keycloak setup for Angular applications",
   "scripts": {
     "contributors:add": "node ./node_modules/all-contributors-cli/dist/cli add",
     "contributors:generate": "node ./node_modules/all-contributors-cli/dist/cli generate",
     "clean": "node ./node_modules/shx/lib/cli rm -rf ./dist/",
     "build": "npm run clean && node ./node_modules/@angular/cli/bin/ng build keycloak-angular --prod",
-    "prepare": "npm run build",
     "test": "node ./node_modules/@angular/cli/bin/ng test keycloak-angular",
     "test:ci": "node ./node_modules/@angular/cli/bin/ng test keycloak-angular --watch=false",
     "lint": "node ./node_modules/@angular/cli/bin/ng lint",
@@ -86,10 +78,5 @@
     "tslint": "~5.11.0",
     "typescript": "~3.2.2",
     "zone.js": "^0.8.26"
-  },
-  "peerDependencies": {
-    "@angular/common": "^7.0.0",
-    "@angular/core": "^7.0.0",
-    "rxjs": "^6.3.3"
   }
 }
